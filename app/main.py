@@ -1,12 +1,14 @@
 import os
 from pathlib import Path
 
+import json
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from .agente import CLIENTE_ID, construir_agente
+from .agente import BASE_DIR, CLIENTE_ID, construir_agente
 from .clientes import obtener_cliente
 
 app = FastAPI(title="Asistente virtual multi-cliente")
@@ -14,6 +16,19 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "tem
 
 cliente = obtener_cliente(CLIENTE_ID)
 agente = construir_agente(CLIENTE_ID)
+
+
+def _cargar_imagenes(cliente_id: str) -> dict:
+    ruta = BASE_DIR / "conocimiento" / cliente_id / "imagenes.json"
+    if not ruta.exists():
+        return {}
+    with open(ruta, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    # Descarta claves de comentario y entradas vacías (sin URL asignada aún)
+    return {k: v for k, v in data.items() if not k.startswith("_") and v}
+
+
+IMAGENES_CLIENTE = _cargar_imagenes(CLIENTE_ID)
 
 
 class MensajeRequest(BaseModel):
@@ -41,6 +56,11 @@ def _extraer_texto(content) -> str:
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request, "index.html", {"cliente": cliente})
+
+
+@app.get("/api/imagenes")
+def imagenes():
+    return IMAGENES_CLIENTE
 
 
 @app.post("/api/chat")

@@ -101,7 +101,19 @@ no encuentres ahí.
 
 Si el usuario pregunta algo que NO tiene relación con {nombre}, indícalo
 amablemente y redirige la conversación hacia cómo sí puedes ayudarle
-(información sobre {nombre})."""
+(información sobre {nombre}).
+
+FORMATO DE RESPUESTA (importante, se usa para mostrar tarjetas visuales):
+- Cuando la respuesta tenga varios temas o varios elementos (ej. varias
+  atracciones, varias tarifas, varios horarios), organiza cada uno bajo
+  su propio encabezado markdown "### " con un emoji al inicio del título
+  (ej. "### 🎠 Chiquicity"), seguido de una lista de viñetas con los datos.
+- Cuando la respuesta sea corta, conversacional, un saludo, o de
+  naturaleza sensible/delicada (salud mental, seguridad personal,
+  emergencias), NO uses encabezados ni viñetas — responde en texto
+  plano y humano, como una persona hablando, sin ningún formato especial.
+  Esto es una regla estricta: la claridad y calidez del mensaje importan
+  más que la consistencia visual en esos casos."""
 
 
 def construir_agente(cliente_id: str = None):

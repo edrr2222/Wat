@@ -1,0 +1,8 @@
+{
+  "_comentario": "Mapa de imágenes opcional. La clave es una palabra clave que se busca dentro del título de cada tarjeta (sin importar mayúsculas/acentos); el valor es la URL de la imagen. SOLO usa imágenes que el cliente te haya dado o autorizado explícitamente — no fotos tomadas de otros sitios sin permiso.",
+  "bioparque": "",
+  "tren de los andes": "",
+  "ecoparque": "",
+  "horarios": "",
+  "tarifas": ""
+}
