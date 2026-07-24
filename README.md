@@ -75,7 +75,30 @@ uvicorn app.main:app --reload
 
 Abre `http://localhost:8000`.
 
+## Respuestas como tarjetas visuales (no solo texto plano)
+
+En vez de pedirle al modelo que devuelva JSON estructurado (frágil — cualquier variación rompe el parseo), el sistema aprovecha que el modelo ya organiza sus respuestas con encabezados Markdown (`### 🎠 Título`) y las **convierte en tarjetas en el frontend**:
+
+- Cada `### ` se vuelve una tarjeta con ícono (el emoji del encabezado), título y contenido
+- Si el cliente tiene una imagen asignada para esa tarjeta en `imagenes.json`, se muestra
+- Las respuestas de clima se muestran como un "chip" compacto en vez de tarjeta completa
+- **Las respuestas cortas, saludos, o de naturaleza sensible (salud mental, seguridad) se muestran siempre como texto plano simple** — nunca se fuerzan a formato de tarjeta. Esto es intencional: el prompt del sistema le indica explícitamente al modelo que en esos casos responda sin encabezados ni viñetas, y el frontend solo activa las tarjetas cuando detecta 2 o más secciones con encabezado.
+
+### Agregar imágenes a las tarjetas
+
+Edita `app/conocimiento/<cliente_id>/imagenes.json`:
+```json
+{
+  "bioparque": "https://url-de-una-imagen-autorizada.jpg",
+  "tren de los andes": "https://otra-imagen-autorizada.jpg"
+}
+```
+La clave es una palabra que se busca (sin distinguir mayúsculas/acentos) dentro del título de cada tarjeta.
+
+> ⚠️ Usa solo imágenes que el cliente te haya dado o autorizado explícitamente para publicar — no tomes fotos de otros sitios sin permiso.
+
 ## Cómo alimentar la base de conocimiento — resumen de opciones
+
 
 | Fuente | Cómo |
 |---|---|

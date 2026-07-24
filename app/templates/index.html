@@ -6,6 +6,8 @@
 <title>{{ cliente.nombre }} — Asistente virtual</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js"></script>
 <style>
   :root{
     --bg:#132A23; --panel:#1C3A31; --panel-2:#0F221C; --border:#2E4C41;
@@ -14,7 +16,7 @@
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; display:flex; justify-content:center; padding:26px 16px 50px;}
-  .wrap{max-width:560px; width:100%; display:flex; flex-direction:column; height:calc(100vh - 76px);}
+  .wrap{max-width:600px; width:100%; display:flex; flex-direction:column; height:calc(100vh - 76px);}
 
   .hero{text-align:center; margin-bottom:18px;}
   h1{font-family:'Fraunces',serif; font-weight:700; font-size:26px; margin-bottom:6px;}
@@ -22,12 +24,37 @@
 
   .chat-box{
     flex:1; background:var(--panel); border:1px solid var(--border); border-radius:14px;
-    padding:18px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; margin-bottom:14px;
+    padding:18px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; margin-bottom:14px;
   }
-  .msg{max-width:82%; padding:11px 14px; border-radius:12px; font-size:14px; line-height:1.55;}
+
+  /* --- Burbuja de texto simple (saludo, respuestas cortas, sensibles) --- */
+  .msg{max-width:85%; padding:11px 14px; border-radius:12px; font-size:14px; line-height:1.6;}
   .msg.usuario{align-self:flex-end; background:var(--acento); color:#2b1206;}
   .msg.bot{align-self:flex-start; background:var(--panel-2); border:1px solid var(--border);}
   .msg.typing{align-self:flex-start; color:var(--text-dimmer); font-style:italic;}
+
+  /* --- Respuesta en tarjetas --- */
+  .respuesta-tarjetas{align-self:flex-start; max-width:100%; width:100%; display:flex; flex-direction:column; gap:10px;}
+  .intro-texto{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:10px 14px; font-size:14px; line-height:1.6;}
+  .card-grid{display:flex; flex-direction:column; gap:10px;}
+  .card{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;}
+  .card-img{width:100%; height:130px; object-fit:cover; display:block; background:var(--border);}
+  .card-body{padding:12px 14px;}
+  .card-title{font-family:'Fraunces',serif; font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .card-icon{font-size:18px;}
+  .card-content{font-size:13.5px; color:var(--text-dim); line-height:1.6;}
+  .card-content ul{padding-left:18px; margin-top:4px;}
+  .card-content li{margin-bottom:3px;}
+  .card-content strong{color:var(--text);}
+  .card-content p{margin-bottom:6px;}
+
+  /* --- Chip de clima --- */
+  .weather-chip{
+    align-self:flex-start; display:flex; align-items:center; gap:10px;
+    background:linear-gradient(135deg, var(--panel-2), var(--panel)); border:1px solid var(--border);
+    border-radius:20px; padding:10px 16px; font-size:13.5px;
+  }
+  .weather-chip .icon{font-size:22px;}
 
   .input-row{display:flex; gap:8px;}
   input{flex:1; background:var(--panel-2); border:1px solid var(--border); color:var(--text); padding:13px 14px; border-radius:10px; font-size:14px;}
@@ -71,12 +98,145 @@
 
 <script>
 const sessionId = crypto.randomUUID();
+let mapaImagenes = {};
 
-function agregarMensaje(texto, clase) {
+fetch('/api/imagenes').then(r => r.json()).then(data => { mapaImagenes = data; }).catch(() => {});
+
+function normalizar(txt) {
+  return txt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function buscarImagen(titulo) {
+  const t = normalizar(titulo);
+  for (const [clave, url] of Object.entries(mapaImagenes)) {
+    if (t.includes(normalizar(clave))) return url;
+  }
+  return null;
+}
+
+function extraerIconoYTitulo(tituloCrudo) {
+  // Separa un emoji inicial (si existe) del resto del título
+  const match = tituloCrudo.match(/^(\p{Emoji_Presentation}|\p{Extended_Pictographic})\s*/u);
+  if (match) {
+    return { icono: match[0].trim(), titulo: tituloCrudo.slice(match[0].length).trim() };
+  }
+  return { icono: '📌', titulo: tituloCrudo.trim() };
+}
+
+function esRespuestaClima(texto) {
+  return /^clima actual en/i.test(texto.trim());
+}
+
+function renderClima(texto) {
+  const tempMatch = texto.match(/(-?\d+(\.\d+)?)\s*°C/);
+  const icono = tempMatch && parseFloat(tempMatch[1]) < 12 ? '🌥️' : '☀️';
+  const div = document.createElement('div');
+  div.className = 'weather-chip';
+  div.innerHTML = `<span class="icon">${icono}</span><span>${DOMPurify.sanitize(texto)}</span>`;
+  return div;
+}
+
+function parsearEnSecciones(texto) {
+  // Divide el markdown en: introducción (antes del primer "### ") + secciones con encabezado
+  const lineas = texto.split('\n');
+  const secciones = [];
+  let introLineas = [];
+  let actual = null;
+
+  for (const linea of lineas) {
+    const esEncabezado = /^###\s+/.test(linea);
+    if (esEncabezado) {
+      if (actual) secciones.push(actual);
+      actual = { titulo: linea.replace(/^###\s+/, '').trim(), cuerpo: [] };
+    } else if (actual) {
+      actual.cuerpo.push(linea);
+    } else {
+      introLineas.push(linea);
+    }
+  }
+  if (actual) secciones.push(actual);
+
+  return { intro: introLineas.join('\n').trim(), secciones };
+}
+
+function renderRespuestaEstructurada(texto) {
+  const { intro, secciones } = parsearEnSecciones(texto);
+
+  // Si no hay al menos 2 secciones con encabezado, no vale la pena forzar tarjetas —
+  // se muestra como burbuja normal (esto protege automáticamente saludos, respuestas
+  // cortas, y respuestas sensibles que el prompt ya pide dejar en texto plano).
+  if (secciones.length < 2) return null;
+
+  const contenedor = document.createElement('div');
+  contenedor.className = 'respuesta-tarjetas';
+
+  if (intro) {
+    const introDiv = document.createElement('div');
+    introDiv.className = 'intro-texto';
+    introDiv.innerHTML = DOMPurify.sanitize(marked.parse(intro));
+    contenedor.appendChild(introDiv);
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'card-grid';
+
+  secciones.forEach(sec => {
+    const { icono, titulo } = extraerIconoYTitulo(sec.titulo);
+    const imagenUrl = buscarImagen(titulo);
+
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    let html = '';
+    if (imagenUrl) html += `<img class="card-img" src="${imagenUrl}" alt="${titulo}" loading="lazy">`;
+    html += `<div class="card-body">
+      <div class="card-title"><span class="card-icon">${icono}</span>${titulo}</div>
+      <div class="card-content">${DOMPurify.sanitize(marked.parse(sec.cuerpo.join('\n')))}</div>
+    </div>`;
+    card.innerHTML = html;
+    grid.appendChild(card);
+  });
+
+  contenedor.appendChild(grid);
+  return contenedor;
+}
+
+function agregarMensajeUsuario(texto) {
   const box = document.getElementById('chatBox');
   const div = document.createElement('div');
-  div.className = 'msg ' + clase;
+  div.className = 'msg usuario';
   div.textContent = texto;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function agregarMensajeBot(texto) {
+  const box = document.getElementById('chatBox');
+  let el;
+
+  if (esRespuestaClima(texto)) {
+    el = renderClima(texto);
+  } else {
+    el = renderRespuestaEstructurada(texto);
+  }
+
+  if (!el) {
+    // Texto plano: saludo, respuesta corta, o contenido sensible — sin tarjetas.
+    el = document.createElement('div');
+    el.className = 'msg bot';
+    el.textContent = texto;
+  }
+
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+
+function agregarEscribiendo() {
+  const box = document.getElementById('chatBox');
+  const div = document.createElement('div');
+  div.className = 'msg typing bot';
+  div.textContent = 'Escribiendo…';
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
   return div;
@@ -84,9 +244,9 @@ function agregarMensaje(texto, clase) {
 
 async function enviarTexto(texto) {
   if (!texto.trim()) return;
-  agregarMensaje(texto, 'usuario');
+  agregarMensajeUsuario(texto);
   document.getElementById('mensajeInput').value = '';
-  const typingEl = agregarMensaje('Escribiendo…', 'typing bot');
+  const typingEl = agregarEscribiendo();
 
   try {
     const res = await fetch('/api/chat', {
@@ -96,11 +256,11 @@ async function enviarTexto(texto) {
     });
     const data = await res.json();
     typingEl.remove();
-    if (!res.ok) { agregarMensaje('Ocurrió un error: ' + (data.detail || 'inténtalo de nuevo.'), 'bot'); return; }
-    agregarMensaje(data.respuesta, 'bot');
+    if (!res.ok) { agregarMensajeBot('Ocurrió un error: ' + (data.detail || 'inténtalo de nuevo.')); return; }
+    agregarMensajeBot(data.respuesta);
   } catch (err) {
     typingEl.remove();
-    agregarMensaje('No se pudo conectar con el servidor.', 'bot');
+    agregarMensajeBot('No se pudo conectar con el servidor.');
   }
 }
 
