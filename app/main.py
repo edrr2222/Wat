@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -5,22 +6,19 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from .agente import construir_agente
+from .agente import CLIENTE_ID, construir_agente
+from .clientes import obtener_cliente
 
-app = FastAPI(title="BogotáGuía")
+app = FastAPI(title="Asistente virtual multi-cliente")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
-agente = construir_agente()
+cliente = obtener_cliente(CLIENTE_ID)
+agente = construir_agente(CLIENTE_ID)
 
 
 class MensajeRequest(BaseModel):
     session_id: str
     mensaje: str
-
-
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
 
 
 def _extraer_texto(content) -> str:
@@ -40,6 +38,11 @@ def _extraer_texto(content) -> str:
     return str(content)
 
 
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    return templates.TemplateResponse(request, "index.html", {"cliente": cliente})
+
+
 @app.post("/api/chat")
 def chat(payload: MensajeRequest):
     resultado = agente.invoke(
@@ -52,4 +55,4 @@ def chat(payload: MensajeRequest):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "servicio": "bogota-guia-langchain"}
+    return {"status": "ok", "cliente_activo": CLIENTE_ID}

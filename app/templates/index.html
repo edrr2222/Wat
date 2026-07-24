@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BogotáGuía — Asistente turístico con LangChain</title>
+<title>{{ cliente.nombre }} — Asistente virtual</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#132A23; --panel:#1C3A31; --panel-2:#0F221C; --border:#2E4C41;
-    --terracotta:#D97D54; --terracotta-dim:#3A2416; --gold:#E8B84B;
+    --acento:#D97D54; --acento-dim:#3A2416; --gold:#E8B84B;
     --text:#F2EDE4; --text-dim:#9AB0A6; --text-dimmer:#5E7A6E;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
@@ -17,7 +17,7 @@
   .wrap{max-width:560px; width:100%; display:flex; flex-direction:column; height:calc(100vh - 76px);}
 
   .hero{text-align:center; margin-bottom:18px;}
-  h1{font-family:'Fraunces',serif; font-weight:700; font-size:28px; margin-bottom:6px;}
+  h1{font-family:'Fraunces',serif; font-weight:700; font-size:26px; margin-bottom:6px;}
   .hero p{color:var(--text-dim); font-size:13.5px;}
 
   .chat-box{
@@ -25,24 +25,18 @@
     padding:18px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; margin-bottom:14px;
   }
   .msg{max-width:82%; padding:11px 14px; border-radius:12px; font-size:14px; line-height:1.55;}
-  .msg.usuario{align-self:flex-end; background:var(--terracotta); color:#2b1206;}
+  .msg.usuario{align-self:flex-end; background:var(--acento); color:#2b1206;}
   .msg.bot{align-self:flex-start; background:var(--panel-2); border:1px solid var(--border);}
   .msg.typing{align-self:flex-start; color:var(--text-dimmer); font-style:italic;}
 
   .input-row{display:flex; gap:8px;}
-  input{
-    flex:1; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
-    padding:13px 14px; border-radius:10px; font-size:14px;
-  }
-  input:focus{outline:none; border-color:var(--terracotta);}
-  button{
-    background:linear-gradient(135deg, var(--terracotta), var(--gold)); color:#2b1206; border:none;
-    font-weight:700; padding:0 20px; border-radius:10px; cursor:pointer;
-  }
+  input{flex:1; background:var(--panel-2); border:1px solid var(--border); color:var(--text); padding:13px 14px; border-radius:10px; font-size:14px;}
+  input:focus{outline:none; border-color:var(--acento);}
+  button{background:linear-gradient(135deg, var(--acento), var(--gold)); color:#2b1206; border:none; font-weight:700; padding:0 20px; border-radius:10px; cursor:pointer;}
 
   .suggestions{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
   .sug{background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim); font-size:12px; padding:7px 12px; border-radius:20px; cursor:pointer;}
-  .sug:hover{border-color:var(--terracotta); color:var(--terracotta);}
+  .sug:hover{border-color:var(--acento); color:var(--acento);}
 
   footer{text-align:center; color:var(--text-dimmer); font-size:10.5px; margin-top:14px; line-height:1.6;}
 </style>
@@ -50,19 +44,18 @@
 <body>
 <div class="wrap">
   <div class="hero">
-    <h1>🏔 BogotáGuía</h1>
-    <p>Pregúntame lo que quieras sobre turismo en Bogotá y sus alrededores.</p>
+    <h1>{{ cliente.emoji }} {{ cliente.nombre }}</h1>
+    <p>Asistente virtual — pregúntame lo que quieras.</p>
   </div>
 
   <div class="suggestions">
-    <div class="sug" onclick="enviarSugerencia(this)">Plan romántico para esta noche</div>
-    <div class="sug" onclick="enviarSugerencia(this)">¿Qué hacer con niños un domingo?</div>
-    <div class="sug" onclick="enviarSugerencia(this)">Excursión de un día cerca de Bogotá</div>
-    <div class="sug" onclick="enviarSugerencia(this)">¿Va a llover hoy en Bogotá?</div>
+    {% for sugerencia in cliente.sugerencias %}
+      <div class="sug" onclick="enviarSugerencia(this)">{{ sugerencia }}</div>
+    {% endfor %}
   </div>
 
   <div class="chat-box" id="chatBox">
-    <div class="msg bot">¡Hola! Soy BogotáGuía 🏔 Cuéntame qué tipo de plan buscas — cultura, naturaleza, gastronomía, vida nocturna, o una excursión fuera de la ciudad — y te recomiendo algo real de mi base de conocimiento.</div>
+    <div class="msg bot">¡Hola! Soy el asistente virtual de {{ cliente.nombre }} {{ cliente.emoji }} ¿En qué te puedo ayudar?</div>
   </div>
 
   <div class="input-row">
@@ -71,8 +64,8 @@
   </div>
 
   <footer>
-    LangChain + Chroma (RAG) + Google Gemini + Open-Meteo (clima).<br>
-    Proyecto de portafolio — información de referencia, verifica horarios y precios actuales.
+    LangChain + Chroma (RAG) + Google Gemini.<br>
+    Asistente de demostración — verifica siempre la info crítica con la fuente oficial.
   </footer>
 </div>
 
@@ -93,7 +86,6 @@ async function enviarTexto(texto) {
   if (!texto.trim()) return;
   agregarMensaje(texto, 'usuario');
   document.getElementById('mensajeInput').value = '';
-
   const typingEl = agregarMensaje('Escribiendo…', 'typing bot');
 
   try {
@@ -104,25 +96,16 @@ async function enviarTexto(texto) {
     });
     const data = await res.json();
     typingEl.remove();
-    if (!res.ok) {
-      agregarMensaje('Ocurrió un error: ' + (data.detail || 'inténtalo de nuevo.'), 'bot');
-      return;
-    }
+    if (!res.ok) { agregarMensaje('Ocurrió un error: ' + (data.detail || 'inténtalo de nuevo.'), 'bot'); return; }
     agregarMensaje(data.respuesta, 'bot');
   } catch (err) {
     typingEl.remove();
-    agregarMensaje('No se pudo conectar con el servidor. ¿Está corriendo "uvicorn app.main:app"?', 'bot');
+    agregarMensaje('No se pudo conectar con el servidor.', 'bot');
   }
 }
 
-function enviar() {
-  const input = document.getElementById('mensajeInput');
-  enviarTexto(input.value);
-}
-
-function enviarSugerencia(el) {
-  enviarTexto(el.textContent);
-}
+function enviar() { enviarTexto(document.getElementById('mensajeInput').value); }
+function enviarSugerencia(el) { enviarTexto(el.textContent); }
 </script>
 </body>
 </html>
