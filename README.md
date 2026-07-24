@@ -1,79 +1,97 @@
-# BogotáGuía
+# Asistente virtual multi-cliente (LangChain + RAG)
 
-Asistente conversacional de turismo para Bogotá y sus alrededores, construido con **LangChain**. Combina dos técnicas de IA en un solo agente:
+Asistente conversacional reutilizable para **cualquier tipo de negocio** — parques temáticos, restaurantes, hoteles, clínicas, lo que sea. Cada cliente se configura con un bloque corto de texto + sus propios documentos; el prompt del sistema se arma solo.
 
-1. **RAG (Retrieval-Augmented Generation)** — responde basándose en una base de conocimiento propia (no inventa lugares), indexada vectorialmente con Chroma.
-2. **Agente con herramientas (tool calling)** — el modelo decide por sí solo cuándo buscar en la base de conocimiento y cuándo consultar el clima real antes de responder.
+## Arquitectura
 
-## Stack
+```
+app/
+├── clientes.py                    ← un bloque corto por cliente (nombre, tipo, descripción...)
+├── agente.py                      ← 100% genérico, no sabe nada de ningún cliente en particular
+├── conocimiento/
+│   ├── jaime_duque/
+│   │   ├── historia.md
+│   │   ├── zonas.md
+│   │   ├── tarifas.md
+│   │   ├── consejos.md
+│   │   └── fuentes.json           ← URLs que se rastrean automáticamente
+│   └── restaurante_ejemplo/
+│       └── info.md
+chroma_db/
+├── jaime_duque/                   ← base vectorial propia de este cliente
+└── restaurante_ejemplo/           ← nunca se mezclan entre sí
+ingest.py                          ← construye/actualiza la base de un cliente
+```
 
-- **LangChain 1.0+** (`create_agent`, la API moderna basada en LangGraph — reemplaza al patrón anterior `create_tool_calling_agent` + `AgentExecutor`)
-- **Chroma** — base de datos vectorial local (no necesita servidor aparte)
-- **Google Gemini** (`gemini-2.5-flash` + `text-embedding-004`) — API gratuita
-- **Open-Meteo** — API de clima gratuita, sin necesidad de clave
-- **FastAPI** — expone el agente como chat web
+## Cómo agregar un cliente nuevo (parque, restaurante, hospital, lo que sea)
 
-> **Nota sobre versiones**: LangChain es una librería que cambia rápido. En octubre de 2025 lanzaron la versión 1.0, que reorganizó por completo el módulo de agentes — `AgentExecutor` se movió a un paquete separado (`langchain_classic`). Si en el futuro ves un error de import similar, es señal de que la librería volvió a cambiar; revisa la [documentación oficial de agentes](https://docs.langchain.com/oss/python/langchain/agents) para la sintaxis vigente.
->
-> Lo mismo pasa con los **nombres de modelo de Gemini** — Google los renueva y retira con frecuencia (por ejemplo, `gemini-2.5-flash` dejó de estar disponible para cuentas nuevas en julio de 2026, y `text-embedding-004` fue retirado por completo, reemplazado por `gemini-embedding-001`). Por eso este proyecto usa el alias `gemini-flash-latest` en vez de un nombre de versión específico — Google lo mantiene apuntando siempre al modelo Flash estable más reciente. Si en el futuro te sale un error 404 de modelo no encontrado, revisa [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models) para el nombre vigente.
+1. Crea la carpeta `app/conocimiento/<id_cliente>/`
+2. Dentro, agrega documentos `.md` con la información que quieras que el asistente use
+3. (Opcional) Agrega un `fuentes.json` con URLs para que el sistema las rastree automáticamente:
+   ```json
+   { "urls": ["https://ejemplo.com/horarios", "https://ejemplo.com/menu"] }
+   ```
+4. Agrega un bloque en `app/clientes.py`:
+   ```python
+   "mi_cliente_nuevo": {
+       "nombre": "Nombre del negocio",
+       "tipo_negocio": "hospital / hotel / restaurante / lo que sea",
+       "descripcion_corta": "Una o dos frases de contexto.",
+       "carpeta_conocimiento": "mi_cliente_nuevo",
+       "emoji": "🏥",
+       "usa_clima": False,
+       "sugerencias": ["Pregunta de ejemplo 1", "Pregunta de ejemplo 2"],
+   }
+   ```
+5. Corre la ingesta:
+   ```bash
+   python ingest.py mi_cliente_nuevo
+   ```
+6. Cambia `CLIENTE_ACTIVO=mi_cliente_nuevo` en tu `.env`
+
+Eso es todo — nunca tienes que tocar `agente.py`, `main.py` ni el prompt del sistema.
 
 ## Cómo correrlo
 
 ```bash
 python -m venv venv
 venv\Scripts\activate        # Windows
-# source venv/bin/activate   # macOS/Linux
-
 pip install -r requirements.txt
-copy .env.example .env       # o `cp` en macOS/Linux
+copy .env.example .env
 ```
 
-Edita `.env` con tu clave gratuita de Gemini (créala en https://aistudio.google.com/apikey):
-```
-GEMINI_API_KEY=tu_clave_aqui
+Pon tu clave de Gemini en `.env`. Luego **construye la base de conocimiento del cliente activo**:
+
+```bash
+python ingest.py jaime_duque
 ```
 
-Luego:
+Esto rastrea los `.md` y las URLs de `fuentes.json`, calcula embeddings, y los guarda en `chroma_db/jaime_duque/`. Tarda un poco (varios segundos por URL) — es normal, solo se hace una vez (o cada vez que quieras refrescar la info).
+
+Luego levanta el servidor:
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Abre `http://localhost:8000`. La primera pregunta tarda un poco más porque indexa la base de conocimiento en Chroma automáticamente (queda guardada en `chroma_db/` para las siguientes veces).
+Abre `http://localhost:8000`.
 
-## Cómo pensar la diferencia entre esto y el proyecto anterior ("¿Qué hago hoy?")
+## Cómo alimentar la base de conocimiento — resumen de opciones
 
-Vale la pena que entiendas la diferencia si te preguntan en una entrevista:
+| Fuente | Cómo |
+|---|---|
+| Texto que tú escribes | Archivo `.md` en la carpeta del cliente |
+| Páginas web del cliente | `fuentes.json` con la lista de URLs — ya implementado |
+| PDF (folleto, menú, manual) | Agregar `PyPDFLoader` de `langchain_community` en `ingest.py` |
+| Excel/CSV (catálogo, inventario) | Agregar `CSVLoader` |
+| Sitio completo (todas las páginas) | Reemplazar la lista manual de URLs por `SitemapLoader` |
 
-| | ¿Qué hago hoy? | BogotáGuía |
-|---|---|---|
-| Técnica | Búsqueda vectorial directa + vector de preferencia que se actualiza a mano | RAG orquestado por un agente LangChain |
-| Quién decide qué buscar | Tu código (siempre busca) | El modelo decide si busca en la base de conocimiento, si consulta el clima, o ninguna de las dos |
-| Conversación | Sin memoria de turnos previos | Memoria de conversación por `thread_id` (checkpointer de LangGraph) |
-| Nivel de abstracción | Bajo — controlas cada paso manualmente | Alto — LangChain/LangGraph orquesta el ciclo de razonamiento-acción del agente |
+La estructura de `ingest.py` ya está pensada para agregar estos otros cargadores sin romper nada — cada uno simplemente se agrega a la lista de `documentos` antes de dividir y guardar.
 
-## Estructura
+## ⚠️ Antes de mostrarle esto a un cliente real
 
-```
-bogota-guia-langchain/
-├── requirements.txt
-├── .env.example
-└── app/
-    ├── main.py                # FastAPI: sirve el chat y el endpoint /api/chat
-    ├── agente.py               # Construcción del agente LangChain (RAG + herramientas + memoria)
-    ├── conocimiento/            # Base de conocimiento en Markdown (lo que el RAG indexa)
-    │   ├── atractivos.md
-    │   ├── excursiones.md
-    │   └── practico.md
-    └── templates/index.html    # Interfaz de chat
-```
-
-## Siguientes pasos posibles
-
-- Agregar más documentos a `conocimiento/` (basta con soltar un `.md` nuevo — se re-indexa solo)
-- Cambiar Chroma por `pgvector` para reutilizar la misma infraestructura del proyecto "¿Qué hago hoy?"
-- Agregar una herramienta de geolocalización para recomendar según cercanía real
-- Añadir streaming de la respuesta (LangChain lo soporta nativamente) para que el chat se sienta más fluido
+- **Verifica los precios y horarios** — cambian con frecuencia y el asistente solo sabe lo que hayas indexado. Los datos de Jaime Duque en este repo están marcados con un aviso de verificación.
+- **Vuelve a correr `python ingest.py <cliente>`** cada vez que la información de origen cambie — el asistente no se actualiza solo.
 
 ---
 
-*Proyecto de portafolio. La información turística es de referencia — verifica horarios y precios actuales antes de viajar.*
+*Proyecto de portafolio. Los datos de "restaurante_ejemplo" son ficticios, solo para demostrar que la arquitectura funciona con cualquier tipo de negocio.*
