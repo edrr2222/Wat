@@ -21,6 +21,7 @@ Por qué esto va separado de agente.py:
 """
 import json
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -100,7 +101,34 @@ def ingerir(cliente_id: str):
         import shutil
         shutil.rmtree(destino)
 
-    Chroma.from_documents(fragmentos, _embeddings(), persist_directory=str(destino))
+    # Insertamos en lotes pequeños con pausa entre cada uno para no exceder
+    # el límite del tier gratuito de Gemini (100 peticiones de embeddings/minuto).
+    # Con lotes de 10 y 3s de pausa, el ritmo queda muy por debajo del límite.
+    TAMANO_LOTE = 10
+    PAUSA_SEGUNDOS = 3
+
+    vectorstore = Chroma(persist_directory=str(destino), embedding_function=_embeddings())
+
+    total_lotes = (len(fragmentos) + TAMANO_LOTE - 1) // TAMANO_LOTE
+    for i in range(0, len(fragmentos), TAMANO_LOTE):
+        lote = fragmentos[i:i + TAMANO_LOTE]
+        numero_lote = i // TAMANO_LOTE + 1
+        intentos = 0
+        while True:
+            try:
+                vectorstore.add_documents(lote)
+                print(f"  Lote {numero_lote}/{total_lotes} indexado ✓")
+                break
+            except Exception as e:
+                intentos += 1
+                if intentos >= 4:
+                    raise
+                espera = 20 * intentos
+                print(f"  Lote {numero_lote}/{total_lotes} falló ({e}). Reintentando en {espera}s...")
+                time.sleep(espera)
+        if i + TAMANO_LOTE < len(fragmentos):
+            time.sleep(PAUSA_SEGUNDOS)
+
     print(f"✅ Listo. Base de conocimiento de '{cliente_id}' actualizada.")
 
 
