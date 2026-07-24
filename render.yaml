@@ -3,12 +3,14 @@ services:
     name: bogota-guia-langchain
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && python ingest.py jaime_duque
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: GEMINI_API_KEY
         sync: false          # se configura manualmente en el panel de Render, nunca en el repo
       - key: GEMINI_MODEL
         value: gemini-flash-latest
+      - key: CLIENTE_ACTIVO
+        value: jaime_duque
       - key: PYTHON_VERSION
         value: 3.11.9
